@@ -1,0 +1,204 @@
+//import G2 from '@antv/g2';
+'use strict'
+var G2 = require('../node_modules/@antv/g2');
+var DataSet = require('../node_modules/@antv/data-set');
+var $q = require('../node_modules/jquery');
+var Slider = require('../node_modules/@antv/g2-plugin-slider');
+var dataCandleStick = require('./candlesticktime.json');
+
+
+const data = [
+    { genre: 'Sports', sold: 275 },
+    { genre: 'Strategy', sold: 115 },
+    { genre: 'Action', sold: 120 },
+    { genre: 'Shooter', sold: 350 },
+    { genre: 'Other', sold: 150 }
+]; // G2 对数据源格式的要求，仅仅是 JSON 数组，数组的每个元素是一个标准 JSON 对象。
+// Step 1: 创建 Chart 对象
+const chart = new G2.Chart({
+    container: 'c1', // 指定图表容器 ID
+    width : 600, // 指定图表宽度
+    height : 300 // 指定图表高度
+});
+// Step 2: 载入数据源
+chart.source(data);
+// Step 3：创建图形语法，绘制柱状图，由 genre 和 sold 两个属性决定图形位置，genre 映射至 x 轴，sold 映射至 y 轴
+chart.interval().position('genre*sold').color('genre')
+// Step 4: 渲染图表
+chart.render();
+
+$q('<div id="slider"></div>').insertAfter('#c2');
+var candleData = dataCandleStick;
+
+var startdate = new Date('2015-01-05');
+var startdateTime =Math.round(startdate.getTime/1000)
+var enddate = new Date('2015-3-30');
+var enddateTime = Math.round(enddate.getTime()/1000)
+var ds = new DataSet({
+    state: {
+        start: '2015-01-05',
+        end: '2015-03-30'
+    }
+});
+
+var dv = ds.createView();
+dv.source(candleData).transform({
+    type: 'filter',
+    callback: function callback(obj) {
+        var date = obj.time;
+        return date <= ds.state.end && date >= ds.state.start;
+    }
+}).transform({
+    type: 'map',
+    callback: function callback(obj) {
+        //obj.ktrend = obj.start <= obj.end ? '上涨' : '下跌';
+        if(CompareDate('2015-01-20',obj.time)){
+            obj.ktrend = '买多';
+        }
+        if(CompareDate(obj.time,'2015-03-26')&&CompareDate('2015-05-26',obj.time)){
+            obj.ktrend = '买空';
+        }
+        if(CompareDate(obj.time,'2015-01-19')&&CompareDate('2015-03-26',obj.time)){
+            obj.ktrend = '卖平';
+        }
+
+        obj.btrend = obj.start <= obj.end ? '上涨' : '下跌';
+        obj.range = [obj.start, obj.end, obj.max, obj.min];
+        return obj;
+    }
+});
+function CompareDate(d1,d2)
+{
+    return ((new Date(d1.replace(/-/g,"\/"))) > (new Date(d2.replace(/-/g,"\/"))));
+}
+var candleChart = new G2.Chart({
+    container: 'c2',
+    forceFit: true,
+    //height: window.innerHeight - 50,
+    width : 800, // 指定图表宽度
+    height : 600, // 指定图表高度
+    animate: false,
+    padding: [10, 40, 40, 40],
+    background: {
+        fill: '#0D0D0D', // 图表背景色
+    }
+
+});
+
+candleChart.source(dv, {
+    'time': {
+        type: 'timeCat',
+        nice: false,
+        range: [0, 1]
+    },
+    trend: {
+        values: ['上涨', '下跌']
+    },
+    'volumn': { alias: '成交量' },
+    'start': { alias: '开盘价' },
+    'end': { alias: '收盘价' },
+    'max': { alias: '最高价' },
+    'min': { alias: '最低价' },
+    'range': { alias: '股票价格' }
+});
+
+candleChart.legend({
+    offset: 20
+});
+candleChart.tooltip({
+    showTitle: false,
+    itemTpl: '<li data-index={index}>' + '<span style="background-color:{color};" class="g2-tooltip-marker"></span>' + '{name}{value}</li>'
+});
+
+var kView = candleChart.view({
+    end: {
+        x: 1,
+        y: 0.5
+    }
+});
+kView.source(dv);
+kView.schema().position('time*range').color('ktrend', function (val) {
+    if (val ==='买多'){
+        return '#FF0000';
+    } else if (val ==='买空'){
+        return '#008B00';
+    } else if (val ==='卖平'){
+        return '#CDAA00';
+    }
+
+}).shape('candle').tooltip('time*start*end*max*min', function (time, start, end, max, min) {
+    return {
+        name: time,
+        value: '<br><span style="padding-left: 16px">开盘价：' + start + '</span><br/>' + '<span style="padding-left: 16px">收盘价：' + end + '</span><br/>' + '<span style="padding-left: 16px">最高价：' + max + '</span><br/>' + '<span style="padding-left: 16px">最低价：' + min + '</span>'
+    };
+});
+kView.axis('money', false);
+kView.axis('volumn',false);
+kView.line().position('time*money').color('#68228B');
+kView.line().position('time*volumn').color('#EEEE00');
+
+var barView = candleChart.view({
+    start: {
+        x: 0,
+        y: 0.65
+    }
+});
+barView.source(dv, {
+    volumn: {
+        tickCount: 2
+    }
+});
+barView.axis('time', {
+    tickLine: null,
+    label: null
+});
+barView.axis('volumn', {
+    label: {
+        formatter: function formatter(val) {
+            return parseInt(val / 1000, 10) + 'k';
+        }
+    }
+});
+barView.interval().position('time*volumn').color('btrend', function (val) {
+    if (val === '上涨') {
+        return '#FF0000';
+    }
+
+    if (val === '下跌') {
+        return '#008B00';
+    }
+}).tooltip('time*volumn', function (time, volumn) {
+    return {
+        name: time,
+        value: '<br/><span style="padding-left: 16px">成交量：' + volumn + '</span><br/>'
+    };
+});
+
+candleChart.render();
+
+// 生成 slider
+var slider = new Slider({
+    container: 'slider', // DOM id
+    width: 'auto',
+    height: 26,
+    padding: [20, 40, 20, 40],
+    start: ds.state.start, // 和状态量对应
+    end: ds.state.end,
+    data: candleData, // 源数据
+    xAxis: 'time', // 背景图的横轴对应字段，同时为数据筛选的字段
+    yAxis: 'volumn', // 背景图的纵轴对应字段，同时为数据筛选的字段
+    scales: {
+        time: {
+            type: 'timeCat',
+            nice: false
+        }
+    },
+    onChange: function onChange(_ref) {
+        var startText = _ref.startText,
+            endText = _ref.endText;
+
+        ds.setState('start', startText);
+        ds.setState('end', endText);
+    }
+});
+slider.render();
